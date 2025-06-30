@@ -67,6 +67,30 @@
       video.srcObject = stream;
       // No hay WebRTC aún: solo se muestra tu cámara
     }
+    const salirBtn = document.getElementById("salirBtn");
+
+  salirBtn.addEventListener("click", () => {
+    // ✅ Cerrar WebSocket si estás usando uno
+    if (typeof socket !== "undefined" && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
+
+    // ✅ Detener cámaras
+    if (typeof localStream !== "undefined") {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+
+    // ✅ Vaciar la pantalla
+    document.body.innerHTML = `
+      <div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;text-align:center;">
+        <div>
+          <h2>👋 Saliste del chat</h2>
+          <p>Gracias por participar.</p>
+          <a href="./" style="text-decoration:none;color:#2980b9;">🔄 Volver a entrar</a>
+        </div>
+      </div>
+    `;
+  });
   </script>
 </body>
 </html>
