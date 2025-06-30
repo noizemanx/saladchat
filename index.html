@@ -41,7 +41,7 @@
       chat.hidden = false;
       document.querySelector("button[onclick='enviar()']").hidden = false;
 
-      socket = io("https://TU_BACKEND.onrender.com"); // <-- CAMBIA ESTA URL
+      socket = io("https://saladchat.onrender.com"); // <-- CAMBIA ESTA URL
       socket.emit("entrar", nombreUsuario);
 
       socket.on("mensaje", (data) => {
