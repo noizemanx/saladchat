@@ -15,7 +15,10 @@
   <h2>💬 Sala de Chat</h2>
   <input type="text" id="nombre" placeholder="Tu nombre" />
   <button onclick="entrar()">Entrar al chat</button>
-  
+  <button id="salirBtn" style="position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background: #c0392b; color: white; border: none; border-radius: 10px; cursor: pointer; z-index: 1000;">
+  🚪 Salir del chat
+</button>
+
   <div id="chat" hidden></div>
   <input id="mensaje" placeholder="Escribe algo..." hidden />
   <button onclick="enviar()" hidden>Enviar</button>
