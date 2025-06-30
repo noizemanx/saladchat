@@ -95,6 +95,45 @@
       </div>
     `;
   });
+    const usuariosConCamara = new Set();
+
+socket.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  // Cuando alguien prende su cámara
+  if (data.type === "cam_on") {
+    usuariosConCamara.add(data.userId);
+    mostrarCamaraActiva(data.userId, data.username);
+  }
+
+  // Cuando alguien apaga su cámara
+  if (data.type === "cam_off") {
+    usuariosConCamara.delete(data.userId);
+    ocultarCamaraActiva(data.userId);
+  }
+
+  // ...otros mensajes como texto o entrada/salida
+};
+function mostrarCamaraActiva(userId, username) {
+  const lista = document.getElementById("lista-usuarios");
+  let item = document.getElementById("user-" + userId);
+
+  if (!item) {
+    item = document.createElement("li");
+    item.id = "user-" + userId;
+    lista.appendChild(item);
+  }
+
+  item.innerHTML = `${username} <span style="color:lime;">📷</span>`;
+}
+
+function ocultarCamaraActiva(userId) {
+  const item = document.getElementById("user-" + userId);
+  if (item) {
+    item.remove(); // O simplemente ocultalo si preferís
+  }
+}
+
   </script>
 </body>
 </html>
