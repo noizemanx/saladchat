@@ -3,115 +3,149 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Sala de Chat con Cámara</title>
+<title>Sala VideoChat</title>
 
 <style>
-body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
-#chat { border: 1px solid #555; padding: 10px; height: 300px; overflow-y: scroll; background: #111; margin-top:10px;}
-#videos { display: flex; gap: 10px; margin-top: 10px; }
-video { width: 200px; border: 2px solid #444; border-radius:10px; }
-button { margin-top:5px; }
+body { font-family: sans-serif; background: #111; color: white; padding: 20px; }
+#chat { height:200px; overflow-y:auto; background:#222; padding:10px; margin-top:10px;}
+#videos { display:flex; flex-wrap:wrap; gap:10px; margin-top:15px;}
+video { width:200px; border-radius:10px; background:black;}
+button { margin-top:5px;}
 </style>
 </head>
 <body>
 
-<h2>💬 Sala de Chat</h2>
+<h2>🎥 Sala VideoChat</h2>
 
-<input type="text" id="nombre" placeholder="Tu nombre" />
-<button onclick="entrar()">Entrar al chat</button>
-
-<div id="chat" hidden></div>
-<input id="mensaje" placeholder="Escribe algo..." hidden />
-<button onclick="enviar()" hidden>Enviar</button>
-
-<h3>🎥 Tu cámara</h3>
+<input id="nombre" placeholder="Tu nombre"/>
+<button onclick="entrar()">Entrar</button>
 <button onclick="activarCamara()">Activar Cámara</button>
+
+<div id="chat"></div>
+<input id="mensaje" placeholder="Mensaje..."/>
+<button onclick="enviar()">Enviar</button>
 
 <div id="videos">
   <video id="localVideo" autoplay muted></video>
 </div>
 
-<div id="usuarios-activos" style="position:fixed; top:10px; left:10px; background:#000000a0; color:white; padding:10px; border-radius:10px;">
-  <h4>🎥 Usuarios con cámara</h4>
-  <ul id="lista-usuarios" style="list-style:none; padding:0;"></ul>
-</div>
-
-<button id="salirBtn" style="position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background: #c0392b; color: white; border: none; border-radius: 10px; cursor: pointer;">
-🚪 Salir
-</button>
-
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
 <script>
 let socket;
-let nombreUsuario = "";
-let localStream = null;
-
-const chat = document.getElementById("chat");
-const mensajeInput = document.getElementById("mensaje");
+let localStream;
+let peers = {};
+let nombreUsuario;
 
 function entrar() {
   nombreUsuario = document.getElementById("nombre").value || "Anónimo";
 
-  document.getElementById("nombre").style.display = "none";
-  document.querySelector("button").style.display = "none";
-
-  chat.hidden = false;
-  mensajeInput.hidden = false;
-  document.querySelector("button[onclick='enviar()']").hidden = false;
-
   socket = io("https://saladchat.onrender.com");
 
-  socket.emit("entrar", nombreUsuario);
+  socket.emit("join-room", nombreUsuario);
 
   socket.on("mensaje", (data) => {
-    chat.innerHTML += `<p><strong>${data.nombre}:</strong> ${data.texto}</p>`;
-    chat.scrollTop = chat.scrollHeight;
+    document.getElementById("chat").innerHTML += 
+      `<p><strong>${data.nombre}:</strong> ${data.texto}</p>`;
   });
 
-  socket.on("usuariosCamara", (lista) => {
-    actualizarListaCamara(lista);
+  socket.on("user-connected", (user) => {
+    createPeer(user.id, true);
+  });
+
+  socket.on("signal", async (data) => {
+    if (!peers[data.from]) {
+      createPeer(data.from, false);
+    }
+
+    if (data.signal.type) {
+      await peers[data.from].setRemoteDescription(
+        new RTCSessionDescription(data.signal)
+      );
+
+      if (data.signal.type === "offer") {
+        const answer = await peers[data.from].createAnswer();
+        await peers[data.from].setLocalDescription(answer);
+
+        socket.emit("signal", {
+          to: data.from,
+          signal: answer
+        });
+      }
+    } else {
+      await peers[data.from].addIceCandidate(
+        new RTCIceCandidate(data.signal)
+      );
+    }
+  });
+
+  socket.on("user-disconnected", (id) => {
+    if (peers[id]) {
+      peers[id].close();
+      delete peers[id];
+      document.getElementById(id)?.remove();
+    }
   });
 }
 
 function enviar() {
-  const texto = mensajeInput.value;
-  if (texto.trim() !== "") {
-    socket.emit("mensaje", { nombre: nombreUsuario, texto });
-    mensajeInput.value = "";
-  }
+  const texto = document.getElementById("mensaje").value;
+  socket.emit("mensaje", { nombre: nombreUsuario, texto });
+  document.getElementById("mensaje").value = "";
 }
 
 async function activarCamara() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    document.getElementById("localVideo").srcObject = localStream;
-    socket.emit("camaraActivada", nombreUsuario);
-  } catch (err) {
-    alert("No se pudo activar la cámara");
-  }
-}
-
-function actualizarListaCamara(lista) {
-  const ul = document.getElementById("lista-usuarios");
-  ul.innerHTML = "";
-
-  lista.forEach(user => {
-    const li = document.createElement("li");
-    li.innerHTML = `${user} 📷`;
-    ul.appendChild(li);
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video: true,
+    audio: true
   });
+
+  document.getElementById("localVideo").srcObject = localStream;
 }
 
-document.getElementById("salirBtn").addEventListener("click", () => {
-  if (socket) socket.disconnect();
+function createPeer(id, initiator) {
+  const peer = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
 
   if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
+    localStream.getTracks().forEach(track => {
+      peer.addTrack(track, localStream);
+    });
   }
 
-  location.reload();
-});
+  peer.onicecandidate = event => {
+    if (event.candidate) {
+      socket.emit("signal", {
+        to: id,
+        signal: event.candidate
+      });
+    }
+  };
+
+  peer.ontrack = event => {
+    let video = document.getElementById(id);
+    if (!video) {
+      video = document.createElement("video");
+      video.id = id;
+      video.autoplay = true;
+      document.getElementById("videos").appendChild(video);
+    }
+    video.srcObject = event.streams[0];
+  };
+
+  if (initiator) {
+    peer.createOffer().then(offer => {
+      peer.setLocalDescription(offer);
+      socket.emit("signal", {
+        to: id,
+        signal: offer
+      });
+    });
+  }
+
+  peers[id] = peer;
+}
 </script>
 
 </body>
