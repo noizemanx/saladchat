@@ -36,18 +36,17 @@ let socket;
 let localStream = null;
 let peers = {};
 let nombreUsuario;
+let usuariosPendientes = [];
 
 const btnEntrar = document.getElementById("btnEntrar");
 const btnCamara = document.getElementById("btnCamara");
 const btnEnviar = document.getElementById("btnEnviar");
 
-btnEntrar.addEventListener("click", entrar);
-btnCamara.addEventListener("click", activarCamara);
-btnEnviar.addEventListener("click", enviar);
+btnEntrar.onclick = entrar;
+btnCamara.onclick = activarCamara;
+btnEnviar.onclick = enviar;
 
 function entrar() {
-  if (socket) socket.disconnect();
-
   nombreUsuario = document.getElementById("nombre").value || "Anónimo";
 
   socket = io("https://saladchat.onrender.com", {
@@ -62,8 +61,12 @@ function entrar() {
   });
 
   socket.on("user-connected", (user) => {
+    // Si ya tengo cámara, conecto
     if (localStream) {
       createPeer(user.id, true);
+    } else {
+      // Si no, guardo para después
+      usuariosPendientes.push(user.id);
     }
   });
 
@@ -121,16 +124,16 @@ async function activarCamara() {
 
     document.getElementById("localVideo").srcObject = localStream;
 
-    // Crear conexión con usuarios existentes
-    Object.keys(peers).forEach(id => {
-      localStream.getTracks().forEach(track => {
-        peers[id].addTrack(track, localStream);
-      });
+    // Ahora conectamos con los que estaban pendientes
+    usuariosPendientes.forEach(id => {
+      createPeer(id, true);
     });
+
+    usuariosPendientes = [];
 
   } catch (error) {
     console.error(error);
-    alert("No se pudo activar la cámara. Revisa permisos.");
+    alert("Error activando cámara");
   }
 }
 
@@ -139,11 +142,9 @@ function createPeer(id, initiator) {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
   });
 
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      peer.addTrack(track, localStream);
-    });
-  }
+  localStream.getTracks().forEach(track => {
+    peer.addTrack(track, localStream);
+  });
 
   peer.onicecandidate = event => {
     if (event.candidate) {
