@@ -12,24 +12,25 @@ const io = new Server(server, {
 app.use(cors());
 
 io.on("connection", (socket) => {
-  console.log("🟢 Nuevo usuario conectado");
+  console.log("🟢 Usuario conectado:", socket.id);
 
-  socket.on("entrar", (nombre) => {
-    socket.username = nombre;
-    io.emit("mensaje", { nombre: "Sistema", texto: `${nombre} entró al chat` });
+  socket.on("join-room", () => {
+    socket.join("sala");
+    socket.to("sala").emit("user-connected", socket.id);
   });
 
-  socket.on("mensaje", (data) => {
-    io.emit("mensaje", data);
+  socket.on("signal", (data) => {
+    io.to(data.to).emit("signal", {
+      from: socket.id,
+      signal: data.signal
+    });
   });
 
   socket.on("disconnect", () => {
-    if (socket.username) {
-      io.emit("mensaje", { nombre: "Sistema", texto: `${socket.username} salió del chat` });
-    }
+    socket.to("sala").emit("user-disconnected", socket.id);
   });
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("Servidor corriendo en puerto 3000");
+  console.log("Servidor WebRTC corriendo");
 });
