@@ -6,11 +6,49 @@
 <title>Sala VideoChat</title>
 
 <style>
-body { font-family: sans-serif; background: #111; color: white; padding: 20px; }
-#chat { height:200px; overflow-y:auto; background:#222; padding:10px; margin-top:10px;}
-#videos { display:flex; flex-wrap:wrap; gap:10px; margin-top:15px;}
-video { width:200px; border-radius:10px; background:black;}
-button { margin-top:5px;}
+body {
+  font-family: sans-serif;
+  background: #111;
+  color: white;
+  padding: 20px;
+}
+
+#chat {
+  height:200px;
+  overflow-y:auto;
+  background:#222;
+  padding:10px;
+  margin-top:10px;
+}
+
+#videos {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:15px;
+}
+
+video {
+  width:200px;
+  border-radius:10px;
+  background:black;
+  cursor:pointer;
+  transition: 0.3s;
+}
+
+video.grande {
+  width: 80%;
+  max-width: 900px;
+}
+
+button {
+  margin-top:5px;
+  margin-right:5px;
+  padding:6px 10px;
+  border:none;
+  border-radius:5px;
+  cursor:pointer;
+}
 </style>
 </head>
 <body>
@@ -20,8 +58,10 @@ button { margin-top:5px;}
 <input id="nombre" placeholder="Tu nombre"/>
 <button id="btnEntrar">Entrar</button>
 <button id="btnCamara">Activar Cámara</button>
+<button id="btnMic">Mutear Mic</button>
 
 <div id="chat"></div>
+
 <input id="mensaje" placeholder="Mensaje..."/>
 <button id="btnEnviar">Enviar</button>
 
@@ -37,14 +77,17 @@ let localStream = null;
 let peers = {};
 let nombreUsuario;
 let usuariosPendientes = [];
+let micActivo = true;
 
 const btnEntrar = document.getElementById("btnEntrar");
 const btnCamara = document.getElementById("btnCamara");
 const btnEnviar = document.getElementById("btnEnviar");
+const btnMic = document.getElementById("btnMic");
 
 btnEntrar.onclick = entrar;
 btnCamara.onclick = activarCamara;
 btnEnviar.onclick = enviar;
+btnMic.onclick = toggleMic;
 
 function entrar() {
   nombreUsuario = document.getElementById("nombre").value || "Anónimo";
@@ -61,11 +104,9 @@ function entrar() {
   });
 
   socket.on("user-connected", (user) => {
-    // Si ya tengo cámara, conecto
     if (localStream) {
       createPeer(user.id, true);
     } else {
-      // Si no, guardo para después
       usuariosPendientes.push(user.id);
     }
   });
@@ -124,7 +165,6 @@ async function activarCamara() {
 
     document.getElementById("localVideo").srcObject = localStream;
 
-    // Ahora conectamos con los que estaban pendientes
     usuariosPendientes.forEach(id => {
       createPeer(id, true);
     });
@@ -133,8 +173,19 @@ async function activarCamara() {
 
   } catch (error) {
     console.error(error);
-    alert("Error activando cámara");
+    alert("Error activando cámara o micrófono");
   }
+}
+
+function toggleMic() {
+  if (!localStream) return;
+
+  localStream.getAudioTracks().forEach(track => {
+    track.enabled = !track.enabled;
+    micActivo = track.enabled;
+  });
+
+  btnMic.textContent = micActivo ? "Mutear Mic" : "Activar Mic";
 }
 
 function createPeer(id, initiator) {
@@ -162,6 +213,9 @@ function createPeer(id, initiator) {
       video.id = id;
       video.autoplay = true;
       video.playsInline = true;
+      video.onclick = () => {
+        video.classList.toggle("grande");
+      };
       document.getElementById("videos").appendChild(video);
     }
     video.srcObject = event.streams[0];
