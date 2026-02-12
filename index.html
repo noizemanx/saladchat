@@ -1,139 +1,118 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sala de Chat con Cámara</title>
-  <style>
-    body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
-    #chat { border: 1px solid #555; padding: 10px; height: 300px; overflow-y: scroll; background: #111; }
-    #videos { display: flex; gap: 10px; margin-top: 10px; }
-    video { width: 200px; border: 2px solid #444; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sala de Chat con Cámara</title>
+
+<style>
+body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
+#chat { border: 1px solid #555; padding: 10px; height: 300px; overflow-y: scroll; background: #111; margin-top:10px;}
+#videos { display: flex; gap: 10px; margin-top: 10px; }
+video { width: 200px; border: 2px solid #444; border-radius:10px; }
+button { margin-top:5px; }
+</style>
 </head>
 <body>
-  <h2>💬 Sala de Chat</h2>
-  <input type="text" id="nombre" placeholder="Tu nombre" />
-  <button onclick="entrar()">Entrar al chat</button>
-  <button id="salirBtn" style="position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background: #c0392b; color: white; border: none; border-radius: 10px; cursor: pointer; z-index: 1000;">
-  🚪 Salir del chat
-</button>
 
-  <div id="chat" hidden></div>
-  <input id="mensaje" placeholder="Escribe algo..." hidden />
-  <button onclick="enviar()" hidden>Enviar</button>
-  
-  <h3>🎥 Tu cámara</h3>
-  <button onclick="activarCamara()">Activar Cámara</button>
-  <div id="videos">
-    <video id="localVideo" autoplay muted></video>
-  </div>
-<div id="usuarios-activos" style="position:fixed; top:10px; left:10px; background:#000000a0; color:white; padding:10px; border-radius:10px; max-width:200px; z-index:1000;">
-  <h4 style="margin:0;">🎥 Usuarios con cámara</h4>
-  <ul id="lista-usuarios" style="list-style:none; padding:0; margin-top:5px;"></ul>
+<h2>💬 Sala de Chat</h2>
+
+<input type="text" id="nombre" placeholder="Tu nombre" />
+<button onclick="entrar()">Entrar al chat</button>
+
+<div id="chat" hidden></div>
+<input id="mensaje" placeholder="Escribe algo..." hidden />
+<button onclick="enviar()" hidden>Enviar</button>
+
+<h3>🎥 Tu cámara</h3>
+<button onclick="activarCamara()">Activar Cámara</button>
+
+<div id="videos">
+  <video id="localVideo" autoplay muted></video>
 </div>
 
-  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-  <script>
-    let socket;
-    let nombreUsuario = "";
-    const chat = document.getElementById("chat");
-    const mensajeInput = document.getElementById("mensaje");
+<div id="usuarios-activos" style="position:fixed; top:10px; left:10px; background:#000000a0; color:white; padding:10px; border-radius:10px;">
+  <h4>🎥 Usuarios con cámara</h4>
+  <ul id="lista-usuarios" style="list-style:none; padding:0;"></ul>
+</div>
 
-    function entrar() {
-      nombreUsuario = document.getElementById("nombre").value || "Anónimo";
-      document.getElementById("nombre").style.display = "none";
-      document.querySelector("button").style.display = "none";
-      mensajeInput.hidden = false;
-      chat.hidden = false;
-      document.querySelector("button[onclick='enviar()']").hidden = false;
+<button id="salirBtn" style="position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background: #c0392b; color: white; border: none; border-radius: 10px; cursor: pointer;">
+🚪 Salir
+</button>
 
-      socket = io("https://saladchat.onrender.com"); // <-- CAMBIA ESTA URL
-      socket.emit("entrar", nombreUsuario);
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
-      socket.on("mensaje", (data) => {
-        chat.innerHTML += `<p><strong>${data.nombre}:</strong> ${data.texto}</p>`;
-        chat.scrollTop = chat.scrollHeight;
-      });
-    }
+<script>
+let socket;
+let nombreUsuario = "";
+let localStream = null;
 
-    function enviar() {
-      const texto = mensajeInput.value;
-      if (texto.trim() !== "") {
-        socket.emit("mensaje", { nombre: nombreUsuario, texto });
-        mensajeInput.value = "";
-      }
-    }
+const chat = document.getElementById("chat");
+const mensajeInput = document.getElementById("mensaje");
 
-    async function activarCamara() {
-      const video = document.getElementById("localVideo");
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      video.srcObject = stream;
-      // No hay WebRTC aún: solo se muestra tu cámara
-    }
-    const salirBtn = document.getElementById("salirBtn");
+function entrar() {
+  nombreUsuario = document.getElementById("nombre").value || "Anónimo";
 
-  salirBtn.addEventListener("click", () => {
-    // ✅ Cerrar WebSocket si estás usando uno
-    if (typeof socket !== "undefined" && socket.readyState === WebSocket.OPEN) {
-      socket.close();
-    }
+  document.getElementById("nombre").style.display = "none";
+  document.querySelector("button").style.display = "none";
 
-    // ✅ Detener cámaras
-    if (typeof localStream !== "undefined") {
-      localStream.getTracks().forEach(track => track.stop());
-    }
+  chat.hidden = false;
+  mensajeInput.hidden = false;
+  document.querySelector("button[onclick='enviar()']").hidden = false;
 
-    // ✅ Vaciar la pantalla
-    document.body.innerHTML = `
-      <div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;text-align:center;">
-        <div>
-          <h2>👋 Saliste del chat</h2>
-          <p>Gracias por participar.</p>
-          <a href="./" style="text-decoration:none;color:#2980b9;">🔄 Volver a entrar</a>
-        </div>
-      </div>
-    `;
+  socket = io("https://saladchat.onrender.com");
+
+  socket.emit("entrar", nombreUsuario);
+
+  socket.on("mensaje", (data) => {
+    chat.innerHTML += `<p><strong>${data.nombre}:</strong> ${data.texto}</p>`;
+    chat.scrollTop = chat.scrollHeight;
   });
-    const usuariosConCamara = new Set();
 
-socket.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-
-  // Cuando alguien prende su cámara
-  if (data.type === "cam_on") {
-    usuariosConCamara.add(data.userId);
-    mostrarCamaraActiva(data.userId, data.username);
-  }
-
-  // Cuando alguien apaga su cámara
-  if (data.type === "cam_off") {
-    usuariosConCamara.delete(data.userId);
-    ocultarCamaraActiva(data.userId);
-  }
-
-  // ...otros mensajes como texto o entrada/salida
-};
-function mostrarCamaraActiva(userId, username) {
-  const lista = document.getElementById("lista-usuarios");
-  let item = document.getElementById("user-" + userId);
-
-  if (!item) {
-    item = document.createElement("li");
-    item.id = "user-" + userId;
-    lista.appendChild(item);
-  }
-
-  item.innerHTML = `${username} <span style="color:lime;">📷</span>`;
+  socket.on("usuariosCamara", (lista) => {
+    actualizarListaCamara(lista);
+  });
 }
 
-function ocultarCamaraActiva(userId) {
-  const item = document.getElementById("user-" + userId);
-  if (item) {
-    item.remove(); // O simplemente ocultalo si preferís
+function enviar() {
+  const texto = mensajeInput.value;
+  if (texto.trim() !== "") {
+    socket.emit("mensaje", { nombre: nombreUsuario, texto });
+    mensajeInput.value = "";
   }
 }
 
-  </script>
+async function activarCamara() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    document.getElementById("localVideo").srcObject = localStream;
+    socket.emit("camaraActivada", nombreUsuario);
+  } catch (err) {
+    alert("No se pudo activar la cámara");
+  }
+}
+
+function actualizarListaCamara(lista) {
+  const ul = document.getElementById("lista-usuarios");
+  ul.innerHTML = "";
+
+  lista.forEach(user => {
+    const li = document.createElement("li");
+    li.innerHTML = `${user} 📷`;
+    ul.appendChild(li);
+  });
+}
+
+document.getElementById("salirBtn").addEventListener("click", () => {
+  if (socket) socket.disconnect();
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
+
+  location.reload();
+});
+</script>
+
 </body>
 </html>
