@@ -2,17 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>SaladChat PRO MAX</title>
+<title>SaladChat PRO</title>
 
 <style>
-body {
-  margin:0;
-  background:#000;
-  color:#fff;
-  font-family:sans-serif;
-}
+body { margin:0; background:#000; color:#fff; font-family:sans-serif; }
 
-/* 🔥 CONTROLES */
 #topbar {
   position:fixed;
   top:10px;
@@ -20,12 +14,8 @@ body {
   z-index:10;
 }
 
-button {
-  margin:3px;
-  padding:6px 10px;
-}
+button { margin:3px; padding:6px 10px; }
 
-/* 🔥 USUARIOS */
 #usuarios {
   position:fixed;
   right:0;
@@ -43,7 +33,6 @@ button {
   cursor:pointer;
 }
 
-/* 🔥 CHAT GLOBAL */
 #chatGlobal {
   position:fixed;
   bottom:0;
@@ -57,19 +46,16 @@ button {
   overflow:auto;
 }
 
-/* 🔥 VENTANAS VIDEO */
+/* ventanas */
 .videoBox {
   position:absolute;
   width:250px;
   background:#000;
   border:2px solid #333;
   border-radius:10px;
-  cursor:move;
 }
 
-.videoBox video {
-  width:100%;
-}
+video { width:100%; }
 
 .closeBtn {
   position:absolute;
@@ -108,17 +94,27 @@ socket.emit("join-room", nombre);
 let localStream = null;
 let peers = {};
 let micActivo = true;
+let camPublica = false;
 
-/* 🔥 ACTIVAR CAM */
+/* 🔥 ACTIVAR CAM (ARREGLADO) */
 async function activarCam(){
-  let modo = confirm("Aceptar = Pública / Cancelar = Privada");
+  try{
+    camPublica = confirm("Aceptar = Pública / Cancelar = Privada");
 
-  localStream = await navigator.mediaDevices.getUserMedia({
-    video:true,
-    audio:true
-  });
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video:true,
+      audio:true
+    });
 
-  socket.emit("toggle-cam", modo);
+    // 👉 mostrar tu propia cámara
+    crearVentanaVideo(localStream, "local");
+
+    socket.emit("toggle-cam", camPublica);
+
+  }catch(err){
+    console.error(err);
+    alert("No se pudo activar la cámara");
+  }
 }
 
 /* 🔥 MIC */
@@ -141,9 +137,11 @@ socket.on("lista-usuarios", users=>{
 
     let div = document.createElement("div");
     div.className="user";
-    div.innerText = users[id].nombre;
 
-    // CLICK IZQUIERDO → video
+    let estado = users[id].camPublica ? "🟢" : "🔴";
+
+    div.innerText = estado + " " + users[id].nombre;
+
     div.onclick=()=>{
       if(users[id].camPublica){
         crearPeer(id,true);
@@ -152,15 +150,11 @@ socket.on("lista-usuarios", users=>{
       }
     };
 
-    // CLICK DERECHO → chat privado
     div.oncontextmenu=(e)=>{
       e.preventDefault();
       let texto = prompt("Mensaje privado:");
       if(texto){
-        socket.emit("mensaje-privado", {
-          to:id,
-          texto
-        });
+        socket.emit("mensaje-privado",{to:id,texto});
       }
     };
 
@@ -180,7 +174,7 @@ socket.on("mensaje",(d)=>{
 
 /* 🔥 CHAT PRIVADO */
 socket.on("mensaje-privado",(d)=>{
-  alert(`💬 Privado de ${d.nombre}: ${d.texto}`);
+  alert(`💬 ${d.nombre}: ${d.texto}`);
 });
 
 /* 🔥 SOLICITUD */
@@ -195,7 +189,7 @@ socket.on("respuesta-cam", data=>{
   }
 });
 
-/* 🔥 VIDEO FLOTANTE */
+/* 🔥 VENTANAS VIDEO */
 function crearVentanaVideo(stream,id){
   let box = document.createElement("div");
   box.className="videoBox";
@@ -214,21 +208,6 @@ function crearVentanaVideo(stream,id){
   box.appendChild(video);
   box.appendChild(close);
   document.body.appendChild(box);
-
-  // DRAG
-  box.onmousedown = function(e){
-    let shiftX = e.clientX - box.offsetLeft;
-    let shiftY = e.clientY - box.offsetTop;
-
-    document.onmousemove = function(e){
-      box.style.left = e.clientX - shiftX + 'px';
-      box.style.top = e.clientY - shiftY + 'px';
-    };
-
-    document.onmouseup = function(){
-      document.onmousemove=null;
-    };
-  };
 }
 
 /* 🔥 WEBRTC */
