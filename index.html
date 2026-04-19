@@ -2,20 +2,31 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>SaladChat PRO</title>
+<title>SaladChat PRO UI</title>
 
 <style>
-body { margin:0; background:#000; color:#fff; font-family:sans-serif; }
+body {
+  margin:0;
+  background:#0b0b0b;
+  color:#fff;
+  font-family:Segoe UI;
+}
 
+/* 🔝 TOPBAR */
 #topbar {
   position:fixed;
   top:10px;
   left:10px;
-  z-index:10;
+  z-index:100;
 }
 
-button { margin:3px; padding:6px 10px; }
+.iconBtn {
+  font-size:20px;
+  margin:5px;
+  cursor:pointer;
+}
 
+/* 👥 USUARIOS */
 #usuarios {
   position:fixed;
   right:0;
@@ -23,46 +34,66 @@ button { margin:3px; padding:6px 10px; }
   width:220px;
   height:100%;
   background:#111;
-  overflow:auto;
   padding:10px;
+  overflow:auto;
 }
 
-.user {
-  padding:5px;
-  border-bottom:1px solid #333;
-  cursor:pointer;
-}
-
+/* 💬 CHAT */
 #chatGlobal {
   position:fixed;
   bottom:0;
   left:0;
-  width:300px;
+  width:400px;
+  height:300px;
   background:#111;
+  display:flex;
+  flex-direction:column;
 }
 
 #mensajes {
-  height:150px;
+  flex:1;
   overflow:auto;
+  padding:10px;
 }
 
-/* ventanas */
+#inputArea {
+  display:flex;
+}
+
+#msg {
+  flex:1;
+}
+
+/* 🎥 VIDEO BOX */
 .videoBox {
   position:absolute;
   width:250px;
-  background:#000;
+  resize:both;
+  overflow:hidden;
   border:2px solid #333;
   border-radius:10px;
+  background:#000;
 }
 
-video { width:100%; }
+.videoHeader {
+  background:#111;
+  padding:3px;
+  cursor:move;
+  display:flex;
+  justify-content:space-between;
+}
 
-.closeBtn {
+video {
+  width:100%;
+}
+
+/* 💬 CHAT PRIVADO */
+.privateChat {
   position:absolute;
-  top:0;
-  right:0;
-  background:red;
-  cursor:pointer;
+  width:250px;
+  height:200px;
+  background:#111;
+  border:1px solid #333;
 }
 </style>
 </head>
@@ -70,16 +101,19 @@ video { width:100%; }
 <body>
 
 <div id="topbar">
-  <button onclick="activarCam()">🎥 Activar Cámara</button>
-  <button onclick="toggleMic()">🎤 Mic ON/OFF</button>
+  <span class="iconBtn" onclick="activarCam()">🎥</span>
 </div>
 
 <div id="usuarios"></div>
 
 <div id="chatGlobal">
   <div id="mensajes"></div>
-  <input id="msg">
-  <button onclick="enviar()">Enviar</button>
+  <div id="inputArea">
+    <input id="msg">
+    <button onclick="emoji('😀')">😀</button>
+    <button onclick="emoji('🔥')">🔥</button>
+    <button onclick="enviar()">Enviar</button>
+  </div>
 </div>
 
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
@@ -93,122 +127,150 @@ socket.emit("join-room", nombre);
 
 let localStream = null;
 let peers = {};
-let micActivo = true;
 let camPublica = false;
 
-/* 🔥 ACTIVAR CAM (ARREGLADO) */
+/* 🎥 ACTIVAR CAM */
 async function activarCam(){
-  try{
-    camPublica = confirm("Aceptar = Pública / Cancelar = Privada");
+  if(localStream) return;
 
-    localStream = await navigator.mediaDevices.getUserMedia({
-      video:true,
-      audio:true
-    });
+  camPublica = confirm("¿Quieres cámara pública?");
 
-    // 👉 mostrar tu propia cámara
-    crearVentanaVideo(localStream, "local");
-
-    socket.emit("toggle-cam", camPublica);
-
-  }catch(err){
-    console.error(err);
-    alert("No se pudo activar la cámara");
-  }
-}
-
-/* 🔥 MIC */
-function toggleMic(){
-  if(!localStream) return;
-
-  localStream.getAudioTracks().forEach(t=>{
-    t.enabled = !t.enabled;
-    micActivo = t.enabled;
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video:true,
+    audio:true
   });
+
+  crearVentanaVideo(localStream, "YO", true);
+
+  socket.emit("toggle-cam", camPublica);
 }
 
-/* 🔥 USUARIOS */
-socket.on("lista-usuarios", users=>{
-  let cont = document.getElementById("usuarios");
-  cont.innerHTML="";
+/* 🔄 CAMBIAR CAMARA (MOBILE) */
+async function cambiarCam(){
+  let devices = await navigator.mediaDevices.enumerateDevices();
+  let cams = devices.filter(d=>d.kind==="videoinput");
 
-  for(let id in users){
-    if(id === socket.id) continue;
+  if(cams.length<2) return;
 
-    let div = document.createElement("div");
-    div.className="user";
+  let nueva = cams[1].deviceId;
 
-    let estado = users[id].camPublica ? "🟢" : "🔴";
+  let stream = await navigator.mediaDevices.getUserMedia({
+    video:{deviceId:nueva},
+    audio:true
+  });
 
-    div.innerText = estado + " " + users[id].nombre;
-
-    div.onclick=()=>{
-      if(users[id].camPublica){
-        crearPeer(id,true);
-      } else {
-        socket.emit("solicitar-cam", id);
-      }
-    };
-
-    div.oncontextmenu=(e)=>{
-      e.preventDefault();
-      let texto = prompt("Mensaje privado:");
-      if(texto){
-        socket.emit("mensaje-privado",{to:id,texto});
-      }
-    };
-
-    cont.appendChild(div);
-  }
-});
-
-/* 🔥 CHAT GLOBAL */
-function enviar(){
-  let texto = document.getElementById("msg").value;
-  socket.emit("mensaje",{nombre,texto});
+  localStream = stream;
 }
 
-socket.on("mensaje",(d)=>{
-  mensajes.innerHTML += `<p>${d.nombre}: ${d.texto}</p>`;
-});
+/* 🎥 CREAR VENTANA */
+function crearVentanaVideo(stream,nombre,local=false){
 
-/* 🔥 CHAT PRIVADO */
-socket.on("mensaje-privado",(d)=>{
-  alert(`💬 ${d.nombre}: ${d.texto}`);
-});
-
-/* 🔥 SOLICITUD */
-socket.on("solicitud-cam", data=>{
-  let ok = confirm(`${data.nombre} quiere ver tu cámara`);
-  socket.emit("respuesta-cam",{to:data.from,aceptado:ok});
-});
-
-socket.on("respuesta-cam", data=>{
-  if(data.aceptado){
-    crearPeer(data.from,true);
-  }
-});
-
-/* 🔥 VENTANAS VIDEO */
-function crearVentanaVideo(stream,id){
   let box = document.createElement("div");
   box.className="videoBox";
   box.style.top="100px";
   box.style.left="100px";
 
+  let header = document.createElement("div");
+  header.className="videoHeader";
+  header.innerHTML = `
+    ${nombre}
+    <span>
+      🎤
+      🔄
+      ❌
+    </span>
+  `;
+
   let video = document.createElement("video");
   video.autoplay=true;
   video.srcObject=stream;
 
-  let close = document.createElement("div");
-  close.innerText="X";
-  close.className="closeBtn";
-  close.onclick=()=>box.remove();
-
+  box.appendChild(header);
   box.appendChild(video);
-  box.appendChild(close);
   document.body.appendChild(box);
+
+  // DRAG
+  header.onmousedown = e=>{
+    let shiftX = e.clientX - box.offsetLeft;
+    let shiftY = e.clientY - box.offsetTop;
+
+    document.onmousemove = e=>{
+      box.style.left = e.clientX - shiftX + "px";
+      box.style.top = e.clientY - shiftY + "px";
+    };
+
+    document.onmouseup = ()=>document.onmousemove=null;
+  };
+
+  // BOTONES
+  let icons = header.querySelectorAll("span span, span");
 }
+
+/* 👥 USUARIOS */
+socket.on("lista-usuarios", users=>{
+  usuarios.innerHTML="";
+
+  for(let id in users){
+    if(id===socket.id) continue;
+
+    let div = document.createElement("div");
+    div.innerText = (users[id].camPublica?"🟢":"🔴")+" "+users[id].nombre;
+
+    div.onclick=()=>{
+      if(users[id].camPublica){
+        crearPeer(id,true);
+      }else{
+        socket.emit("solicitar-cam",id);
+      }
+    };
+
+    div.oncontextmenu=e=>{
+      e.preventDefault();
+      abrirChatPrivado(id,users[id].nombre);
+    };
+
+    usuarios.appendChild(div);
+  }
+});
+
+/* 💬 CHAT GLOBAL */
+function enviar(){
+  let texto = msg.value;
+  socket.emit("mensaje",{nombre,texto});
+}
+
+socket.on("mensaje",d=>{
+  mensajes.innerHTML += `<p style="color:#38bdf8">${d.nombre}: ${d.texto}</p>`;
+});
+
+/* 😀 EMOJI */
+function emoji(e){
+  msg.value += e;
+}
+
+/* 💬 CHAT PRIVADO */
+function abrirChatPrivado(id,nombre){
+  let box = document.createElement("div");
+  box.className="privateChat";
+
+  box.innerHTML = `
+    <b>${nombre}</b>
+    <div class="msgs"></div>
+    <input class="inp">
+  `;
+
+  document.body.appendChild(box);
+
+  box.querySelector(".inp").onkeypress=e=>{
+    if(e.key==="Enter"){
+      socket.emit("mensaje-privado",{to:id,texto:e.target.value});
+    }
+  };
+}
+
+socket.on("mensaje-privado",d=>{
+  alert(`💬 ${d.nombre}: ${d.texto}`);
+});
 
 /* 🔥 WEBRTC */
 function crearPeer(id, initiator){
