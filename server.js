@@ -5,29 +5,44 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-app.use(cors());
+let usuarios = {};
 
 io.on("connection", (socket) => {
   console.log("🟢 Usuario conectado:", socket.id);
 
   socket.on("join-room", (nombre) => {
+    usuarios[socket.id] = nombre;
     socket.nombre = nombre;
-    socket.join("sala");
 
-    socket.to("sala").emit("user-connected", {
-      id: socket.id,
-      nombre: nombre
-    });
+    io.emit("lista-usuarios", usuarios);
   });
 
   socket.on("mensaje", (data) => {
-    io.to("sala").emit("mensaje", data);
+    io.emit("mensaje", data);
   });
 
+  // 🔥 SOLICITAR CAMARA
+  socket.on("solicitar-cam", (to) => {
+    io.to(to).emit("solicitud-cam", {
+      from: socket.id,
+      nombre: socket.nombre
+    });
+  });
+
+  // 🔥 RESPUESTA CAMARA
+  socket.on("respuesta-cam", (data) => {
+    io.to(data.to).emit("respuesta-cam", {
+      from: socket.id,
+      aceptado: data.aceptado
+    });
+  });
+
+  // 🔥 WEBRTC SIGNAL
   socket.on("signal", (data) => {
     io.to(data.to).emit("signal", {
       from: socket.id,
@@ -36,10 +51,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    socket.to("sala").emit("user-disconnected", socket.id);
+    delete usuarios[socket.id];
+    io.emit("lista-usuarios", usuarios);
+    io.emit("user-disconnected", socket.id);
   });
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("🔥 Servidor WebRTC corriendo");
+  console.log("🔥 Server PRO corriendo");
 });
