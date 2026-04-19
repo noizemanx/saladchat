@@ -2,31 +2,19 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>SaladChat PRO UI</title>
+<title>SaladChat PRO MAX</title>
 
 <style>
-body {
-  margin:0;
-  background:#0b0b0b;
-  color:#fff;
-  font-family:Segoe UI;
-}
+body { margin:0; background:#000; color:#fff; font-family:sans-serif; }
 
-/* 🔝 TOPBAR */
-#topbar {
-  position:fixed;
-  top:10px;
-  left:10px;
-  z-index:100;
-}
-
+/* botones grandes */
 .iconBtn {
-  font-size:20px;
-  margin:5px;
+  font-size:26px;
+  margin:8px;
   cursor:pointer;
 }
 
-/* 👥 USUARIOS */
+/* usuarios */
 #usuarios {
   position:fixed;
   right:0;
@@ -34,11 +22,33 @@ body {
   width:220px;
   height:100%;
   background:#111;
-  padding:10px;
   overflow:auto;
 }
 
-/* 💬 CHAT */
+/* video */
+.videoBox {
+  position:absolute;
+  width:260px;
+  border:2px solid #333;
+  border-radius:10px;
+  background:#000;
+  touch-action:none;
+}
+
+.videoHeader {
+  background:#111;
+  padding:5px;
+  display:flex;
+  justify-content:space-between;
+  font-size:18px;
+}
+
+.videoHeader span {
+  font-size:22px;
+  margin-left:8px;
+}
+
+/* chat */
 #chatGlobal {
   position:fixed;
   bottom:0;
@@ -50,57 +60,13 @@ body {
   flex-direction:column;
 }
 
-#mensajes {
-  flex:1;
-  overflow:auto;
-  padding:10px;
-}
-
-#inputArea {
-  display:flex;
-}
-
-#msg {
-  flex:1;
-}
-
-/* 🎥 VIDEO BOX */
-.videoBox {
-  position:absolute;
-  width:250px;
-  resize:both;
-  overflow:hidden;
-  border:2px solid #333;
-  border-radius:10px;
-  background:#000;
-}
-
-.videoHeader {
-  background:#111;
-  padding:3px;
-  cursor:move;
-  display:flex;
-  justify-content:space-between;
-}
-
-video {
-  width:100%;
-}
-
-/* 💬 CHAT PRIVADO */
-.privateChat {
-  position:absolute;
-  width:250px;
-  height:200px;
-  background:#111;
-  border:1px solid #333;
-}
+#mensajes { flex:1; overflow:auto; }
 </style>
 </head>
 
 <body>
 
-<div id="topbar">
+<div>
   <span class="iconBtn" onclick="activarCam()">🎥</span>
 </div>
 
@@ -108,12 +74,8 @@ video {
 
 <div id="chatGlobal">
   <div id="mensajes"></div>
-  <div id="inputArea">
-    <input id="msg">
-    <button onclick="emoji('😀')">😀</button>
-    <button onclick="emoji('🔥')">🔥</button>
-    <button onclick="enviar()">Enviar</button>
-  </div>
+  <input id="msg">
+  <button onclick="enviar()">Enviar</button>
 </div>
 
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
@@ -127,42 +89,37 @@ socket.emit("join-room", nombre);
 
 let localStream = null;
 let peers = {};
-let camPublica = false;
+let currentCam = "user";
 
 /* 🎥 ACTIVAR CAM */
 async function activarCam(){
   if(localStream) return;
 
-  camPublica = confirm("¿Quieres cámara pública?");
-
+  let publica = confirm("¿Cámara pública?");
+  
   localStream = await navigator.mediaDevices.getUserMedia({
-    video:true,
+    video:{facingMode:currentCam},
     audio:true
   });
 
   crearVentanaVideo(localStream, "YO", true);
 
-  socket.emit("toggle-cam", camPublica);
+  socket.emit("toggle-cam", publica);
 }
 
-/* 🔄 CAMBIAR CAMARA (MOBILE) */
+/* 🔄 CAMBIO CAMARA */
 async function cambiarCam(){
-  let devices = await navigator.mediaDevices.enumerateDevices();
-  let cams = devices.filter(d=>d.kind==="videoinput");
-
-  if(cams.length<2) return;
-
-  let nueva = cams[1].deviceId;
+  currentCam = currentCam === "user" ? "environment" : "user";
 
   let stream = await navigator.mediaDevices.getUserMedia({
-    video:{deviceId:nueva},
+    video:{facingMode:currentCam},
     audio:true
   });
 
   localStream = stream;
 }
 
-/* 🎥 CREAR VENTANA */
+/* 🎥 VENTANA VIDEO */
 function crearVentanaVideo(stream,nombre,local=false){
 
   let box = document.createElement("div");
@@ -172,14 +129,27 @@ function crearVentanaVideo(stream,nombre,local=false){
 
   let header = document.createElement("div");
   header.className="videoHeader";
-  header.innerHTML = `
-    ${nombre}
-    <span>
-      🎤
-      🔄
-      ❌
-    </span>
-  `;
+
+  let title = document.createElement("span");
+  title.innerText = nombre;
+
+  let controls = document.createElement("span");
+
+  let micBtn = document.createElement("span");
+  micBtn.innerText="🎤";
+
+  let flipBtn = document.createElement("span");
+  flipBtn.innerText="🔄";
+
+  let closeBtn = document.createElement("span");
+  closeBtn.innerText="❌";
+
+  controls.appendChild(micBtn);
+  controls.appendChild(flipBtn);
+  controls.appendChild(closeBtn);
+
+  header.appendChild(title);
+  header.appendChild(controls);
 
   let video = document.createElement("video");
   video.autoplay=true;
@@ -189,21 +159,58 @@ function crearVentanaVideo(stream,nombre,local=false){
   box.appendChild(video);
   document.body.appendChild(box);
 
-  // DRAG
+  /* 🎤 MUTE */
+  micBtn.onclick=()=>{
+    stream.getAudioTracks().forEach(t=>{
+      t.enabled = !t.enabled;
+      micBtn.innerText = t.enabled ? "🎤" : "🔇";
+    });
+  };
+
+  /* 🔄 CAM */
+  flipBtn.onclick=()=>{
+    if(local) cambiarCam();
+  };
+
+  /* ❌ CLOSE */
+  closeBtn.onclick=()=>{
+    box.remove();
+    if(local){
+      socket.emit("cam-off");
+      localStream.getTracks().forEach(t=>t.stop());
+      localStream=null;
+    }
+  };
+
+  /* 🖱️ DRAG + TOUCH */
+  let move = (x,y)=>{
+    box.style.left = x + "px";
+    box.style.top = y + "px";
+  };
+
   header.onmousedown = e=>{
     let shiftX = e.clientX - box.offsetLeft;
     let shiftY = e.clientY - box.offsetTop;
 
     document.onmousemove = e=>{
-      box.style.left = e.clientX - shiftX + "px";
-      box.style.top = e.clientY - shiftY + "px";
+      move(e.clientX-shiftX,e.clientY-shiftY);
     };
 
     document.onmouseup = ()=>document.onmousemove=null;
   };
 
-  // BOTONES
-  let icons = header.querySelectorAll("span span, span");
+  header.ontouchstart = e=>{
+    let touch = e.touches[0];
+    let shiftX = touch.clientX - box.offsetLeft;
+    let shiftY = touch.clientY - box.offsetTop;
+
+    document.ontouchmove = e=>{
+      let t = e.touches[0];
+      move(t.clientX-shiftX,t.clientY-shiftY);
+    };
+
+    document.ontouchend = ()=>document.ontouchmove=null;
+  };
 }
 
 /* 👥 USUARIOS */
@@ -213,63 +220,60 @@ socket.on("lista-usuarios", users=>{
   for(let id in users){
     if(id===socket.id) continue;
 
+    let u = users[id];
+
+    let estado = "⚫";
+    if(u.camActiva){
+      estado = u.camPublica ? "🟢" : "🔴";
+    }
+
     let div = document.createElement("div");
-    div.innerText = (users[id].camPublica?"🟢":"🔴")+" "+users[id].nombre;
+    div.innerText = estado + " " + u.nombre;
 
     div.onclick=()=>{
-      if(users[id].camPublica){
+      if(u.camPublica){
         crearPeer(id,true);
       }else{
         socket.emit("solicitar-cam",id);
       }
     };
 
+    // CLICK DERECHO + TOUCH HOLD
+    let timeout;
+    div.onmousedown=()=>{
+      timeout=setTimeout(()=>abrirPrivado(id,u.nombre),600);
+    };
+    div.onmouseup=()=>clearTimeout(timeout);
+    div.onmouseleave=()=>clearTimeout(timeout);
+
     div.oncontextmenu=e=>{
       e.preventDefault();
-      abrirChatPrivado(id,users[id].nombre);
+      abrirPrivado(id,u.nombre);
     };
 
     usuarios.appendChild(div);
   }
 });
 
-/* 💬 CHAT GLOBAL */
-function enviar(){
-  let texto = msg.value;
-  socket.emit("mensaje",{nombre,texto});
-}
-
-socket.on("mensaje",d=>{
-  mensajes.innerHTML += `<p style="color:#38bdf8">${d.nombre}: ${d.texto}</p>`;
-});
-
-/* 😀 EMOJI */
-function emoji(e){
-  msg.value += e;
-}
-
 /* 💬 CHAT PRIVADO */
-function abrirChatPrivado(id,nombre){
-  let box = document.createElement("div");
-  box.className="privateChat";
-
-  box.innerHTML = `
-    <b>${nombre}</b>
-    <div class="msgs"></div>
-    <input class="inp">
-  `;
-
-  document.body.appendChild(box);
-
-  box.querySelector(".inp").onkeypress=e=>{
-    if(e.key==="Enter"){
-      socket.emit("mensaje-privado",{to:id,texto:e.target.value});
-    }
-  };
+function abrirPrivado(id,nombre){
+  let texto = prompt("Mensaje privado a "+nombre);
+  if(texto){
+    socket.emit("mensaje-privado",{to:id,texto});
+  }
 }
 
 socket.on("mensaje-privado",d=>{
   alert(`💬 ${d.nombre}: ${d.texto}`);
+});
+
+/* 💬 GLOBAL */
+function enviar(){
+  socket.emit("mensaje",{nombre,texto:msg.value});
+}
+
+socket.on("mensaje",d=>{
+  mensajes.innerHTML += `<p>${d.nombre}: ${d.texto}</p>`;
 });
 
 /* 🔥 WEBRTC */
