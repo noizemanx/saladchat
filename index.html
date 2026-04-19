@@ -2,65 +2,83 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>SaladChat PRO MAX</title>
+<title>SaladChat PRO FIX</title>
 
 <style>
-body { margin:0; background:#000; color:#fff; font-family:sans-serif; }
-
-/* botones grandes */
-.iconBtn {
-  font-size:26px;
-  margin:8px;
-  cursor:pointer;
+body {
+  margin:0;
+  background:#000;
+  color:#fff;
+  font-family:sans-serif;
 }
 
-/* usuarios */
+/* 🔥 BOTONES GRANDES */
+.iconBtn {
+  font-size:32px;
+  padding:10px;
+}
+
+/* 👥 USUARIOS */
 #usuarios {
   position:fixed;
   right:0;
   top:0;
-  width:220px;
+  width:260px;
   height:100%;
   background:#111;
   overflow:auto;
 }
 
-/* video */
+.user {
+  padding:12px;
+  border-bottom:1px solid #333;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.user button {
+  font-size:20px;
+  padding:6px;
+}
+
+/* 🎥 VIDEO */
 .videoBox {
   position:absolute;
-  width:260px;
+  width:280px;
+  background:#000;
   border:2px solid #333;
   border-radius:10px;
-  background:#000;
-  touch-action:none;
 }
 
 .videoHeader {
-  background:#111;
-  padding:5px;
   display:flex;
   justify-content:space-between;
-  font-size:18px;
+  background:#111;
+  padding:8px;
 }
 
 .videoHeader span {
-  font-size:22px;
-  margin-left:8px;
+  font-size:26px;
+  margin-left:10px;
 }
 
-/* chat */
+/* 💬 CHAT */
 #chatGlobal {
   position:fixed;
   bottom:0;
   left:0;
-  width:400px;
-  height:300px;
+  width:100%;
+  height:35%;
   background:#111;
   display:flex;
   flex-direction:column;
 }
 
-#mensajes { flex:1; overflow:auto; }
+#mensajes {
+  flex:1;
+  overflow:auto;
+}
 </style>
 </head>
 
@@ -96,36 +114,48 @@ async function activarCam(){
   if(localStream) return;
 
   let publica = confirm("¿Cámara pública?");
-  
+
   localStream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:currentCam},
     audio:true
   });
 
-  crearVentanaVideo(localStream, "YO", true);
+  crearVentanaVideo(localStream,"YO",true);
 
   socket.emit("toggle-cam", publica);
 }
 
-/* 🔄 CAMBIO CAMARA */
+/* 🔄 CAMBIO REAL DE CAMARA */
 async function cambiarCam(){
+
   currentCam = currentCam === "user" ? "environment" : "user";
 
-  let stream = await navigator.mediaDevices.getUserMedia({
+  let newStream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:currentCam},
     audio:true
   });
 
-  localStream = stream;
+  let videoTrack = newStream.getVideoTracks()[0];
+
+  // reemplazar en peers
+  for(let id in peers){
+    let sender = peers[id].getSenders().find(s=>s.track.kind==="video");
+    if(sender){
+      sender.replaceTrack(videoTrack);
+    }
+  }
+
+  localStream.getTracks().forEach(t=>t.stop());
+  localStream = newStream;
 }
 
-/* 🎥 VENTANA VIDEO */
+/* 🎥 VENTANA */
 function crearVentanaVideo(stream,nombre,local=false){
 
   let box = document.createElement("div");
   box.className="videoBox";
-  box.style.top="100px";
-  box.style.left="100px";
+  box.style.top="80px";
+  box.style.left="20px";
 
   let header = document.createElement("div");
   header.className="videoHeader";
@@ -133,26 +163,27 @@ function crearVentanaVideo(stream,nombre,local=false){
   let title = document.createElement("span");
   title.innerText = nombre;
 
-  let controls = document.createElement("span");
+  let controls = document.createElement("div");
 
-  let micBtn = document.createElement("span");
-  micBtn.innerText="🎤";
+  let mic = document.createElement("span");
+  mic.innerText="🎤";
 
-  let flipBtn = document.createElement("span");
-  flipBtn.innerText="🔄";
+  let flip = document.createElement("span");
+  flip.innerText="🔄";
 
-  let closeBtn = document.createElement("span");
-  closeBtn.innerText="❌";
+  let close = document.createElement("span");
+  close.innerText="❌";
 
-  controls.appendChild(micBtn);
-  controls.appendChild(flipBtn);
-  controls.appendChild(closeBtn);
+  controls.appendChild(mic);
+  controls.appendChild(flip);
+  controls.appendChild(close);
 
   header.appendChild(title);
   header.appendChild(controls);
 
   let video = document.createElement("video");
   video.autoplay=true;
+  video.playsInline=true;
   video.srcObject=stream;
 
   box.appendChild(header);
@@ -160,20 +191,20 @@ function crearVentanaVideo(stream,nombre,local=false){
   document.body.appendChild(box);
 
   /* 🎤 MUTE */
-  micBtn.onclick=()=>{
+  mic.onclick=()=>{
     stream.getAudioTracks().forEach(t=>{
-      t.enabled = !t.enabled;
-      micBtn.innerText = t.enabled ? "🎤" : "🔇";
+      t.enabled=!t.enabled;
+      mic.innerText = t.enabled ? "🎤" : "🔇";
     });
   };
 
   /* 🔄 CAM */
-  flipBtn.onclick=()=>{
+  flip.onclick=()=>{
     if(local) cambiarCam();
   };
 
-  /* ❌ CLOSE */
-  closeBtn.onclick=()=>{
+  /* ❌ */
+  close.onclick=()=>{
     box.remove();
     if(local){
       socket.emit("cam-off");
@@ -182,34 +213,19 @@ function crearVentanaVideo(stream,nombre,local=false){
     }
   };
 
-  /* 🖱️ DRAG + TOUCH */
-  let move = (x,y)=>{
-    box.style.left = x + "px";
-    box.style.top = y + "px";
-  };
-
-  header.onmousedown = e=>{
-    let shiftX = e.clientX - box.offsetLeft;
-    let shiftY = e.clientY - box.offsetTop;
-
-    document.onmousemove = e=>{
-      move(e.clientX-shiftX,e.clientY-shiftY);
-    };
-
-    document.onmouseup = ()=>document.onmousemove=null;
-  };
+  /* 📱 DRAG SIMPLE */
+  let startX,startY;
 
   header.ontouchstart = e=>{
-    let touch = e.touches[0];
-    let shiftX = touch.clientX - box.offsetLeft;
-    let shiftY = touch.clientY - box.offsetTop;
+    let t = e.touches[0];
+    startX = t.clientX - box.offsetLeft;
+    startY = t.clientY - box.offsetTop;
+  };
 
-    document.ontouchmove = e=>{
-      let t = e.touches[0];
-      move(t.clientX-shiftX,t.clientY-shiftY);
-    };
-
-    document.ontouchend = ()=>document.ontouchmove=null;
+  header.ontouchmove = e=>{
+    let t = e.touches[0];
+    box.style.left = (t.clientX - startX)+"px";
+    box.style.top = (t.clientY - startY)+"px";
   };
 }
 
@@ -228,9 +244,16 @@ socket.on("lista-usuarios", users=>{
     }
 
     let div = document.createElement("div");
-    div.innerText = estado + " " + u.nombre;
+    div.className="user";
 
-    div.onclick=()=>{
+    let name = document.createElement("span");
+    name.innerText = estado+" "+u.nombre;
+
+    let btnChat = document.createElement("button");
+    btnChat.innerText="💬";
+
+    // VIDEO CLICK
+    name.onclick=()=>{
       if(u.camPublica){
         crearPeer(id,true);
       }else{
@@ -238,33 +261,18 @@ socket.on("lista-usuarios", users=>{
       }
     };
 
-    // CLICK DERECHO + TOUCH HOLD
-    let timeout;
-    div.onmousedown=()=>{
-      timeout=setTimeout(()=>abrirPrivado(id,u.nombre),600);
-    };
-    div.onmouseup=()=>clearTimeout(timeout);
-    div.onmouseleave=()=>clearTimeout(timeout);
-
-    div.oncontextmenu=e=>{
-      e.preventDefault();
-      abrirPrivado(id,u.nombre);
+    // CHAT PRIVADO
+    btnChat.onclick=()=>{
+      let txt = prompt("Mensaje:");
+      if(txt){
+        socket.emit("mensaje-privado",{to:id,texto:txt});
+      }
     };
 
+    div.appendChild(name);
+    div.appendChild(btnChat);
     usuarios.appendChild(div);
   }
-});
-
-/* 💬 CHAT PRIVADO */
-function abrirPrivado(id,nombre){
-  let texto = prompt("Mensaje privado a "+nombre);
-  if(texto){
-    socket.emit("mensaje-privado",{to:id,texto});
-  }
-}
-
-socket.on("mensaje-privado",d=>{
-  alert(`💬 ${d.nombre}: ${d.texto}`);
 });
 
 /* 💬 GLOBAL */
@@ -274,6 +282,11 @@ function enviar(){
 
 socket.on("mensaje",d=>{
   mensajes.innerHTML += `<p>${d.nombre}: ${d.texto}</p>`;
+});
+
+/* 💬 PRIVADO */
+socket.on("mensaje-privado",d=>{
+  alert(`💬 ${d.nombre}: ${d.texto}`);
 });
 
 /* 🔥 WEBRTC */
