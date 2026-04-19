@@ -13,7 +13,13 @@ const io = new Server(server, {
 let usuarios = {};
 
 io.on("connection", (socket) => {
-
+socket.on("mensaje-privado", (data) => {
+  io.to(data.to).emit("mensaje-privado", {
+    from: socket.id,
+    nombre: usuarios[socket.id].nombre,
+    texto: data.texto
+  });
+});
   socket.on("join-room", (nombre) => {
     usuarios[socket.id] = {
       nombre,
