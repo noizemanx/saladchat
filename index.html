@@ -2,20 +2,30 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>SaladChat PRO+</title>
+<title>SaladChat PRO MAX</title>
 
 <style>
-body { margin:0; background:#000; color:#fff; font-family:sans-serif; }
-
-#videos {
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-  gap:5px;
-  padding:5px;
+body {
+  margin:0;
+  background:#000;
+  color:#fff;
+  font-family:sans-serif;
 }
 
-video { width:100%; border-radius:10px; }
+/* 🔥 CONTROLES */
+#topbar {
+  position:fixed;
+  top:10px;
+  left:10px;
+  z-index:10;
+}
 
+button {
+  margin:3px;
+  padding:6px 10px;
+}
+
+/* 🔥 USUARIOS */
 #usuarios {
   position:fixed;
   right:0;
@@ -28,35 +38,63 @@ video { width:100%; border-radius:10px; }
 }
 
 .user {
-  padding:6px;
-  cursor:pointer;
+  padding:5px;
   border-bottom:1px solid #333;
+  cursor:pointer;
 }
 
-.user:hover { background:#222; }
-
-.publica { color:#22c55e; }
-.privada { color:#ef4444; }
-
-#controls {
+/* 🔥 CHAT GLOBAL */
+#chatGlobal {
   position:fixed;
-  top:10px;
-  left:10px;
+  bottom:0;
+  left:0;
+  width:300px;
+  background:#111;
+}
+
+#mensajes {
+  height:150px;
+  overflow:auto;
+}
+
+/* 🔥 VENTANAS VIDEO */
+.videoBox {
+  position:absolute;
+  width:250px;
+  background:#000;
+  border:2px solid #333;
+  border-radius:10px;
+  cursor:move;
+}
+
+.videoBox video {
+  width:100%;
+}
+
+.closeBtn {
+  position:absolute;
+  top:0;
+  right:0;
+  background:red;
+  cursor:pointer;
 }
 </style>
 </head>
 
 <body>
 
-<div id="controls">
-  <button onclick="toggleModo()">Modo: Privada</button>
-</div>
-
-<div id="videos">
-  <video id="localVideo" autoplay muted></video>
+<div id="topbar">
+  <button onclick="activarCam()">🎥 Activar Cámara</button>
+  <button onclick="toggleMic()">🎤 Mic ON/OFF</button>
 </div>
 
 <div id="usuarios"></div>
+
+<div id="chatGlobal">
+  <div id="mensajes"></div>
+  <input id="msg">
+  <button onclick="enviar()">Enviar</button>
+</div>
 
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
@@ -67,42 +105,46 @@ let socket = io("https://saladchat.onrender.com");
 let nombre = prompt("Tu nombre") || "Anon";
 socket.emit("join-room", nombre);
 
-let localStream;
+let localStream = null;
 let peers = {};
-let camPublica = false;
+let micActivo = true;
 
-navigator.mediaDevices.getUserMedia({video:true,audio:true})
-.then(stream=>{
-  localStream = stream;
-  document.getElementById("localVideo").srcObject = stream;
-});
+/* 🔥 ACTIVAR CAM */
+async function activarCam(){
+  let modo = confirm("Aceptar = Pública / Cancelar = Privada");
 
-// 🔥 CAMBIAR MODO
-function toggleModo(){
-  camPublica = !camPublica;
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video:true,
+    audio:true
+  });
 
-  socket.emit("toggle-cam", camPublica);
-
-  document.querySelector("#controls button").innerText =
-    camPublica ? "Modo: Pública" : "Modo: Privada";
+  socket.emit("toggle-cam", modo);
 }
 
-// 🔥 LISTA USUARIOS
-socket.on("lista-usuarios", (users)=>{
+/* 🔥 MIC */
+function toggleMic(){
+  if(!localStream) return;
+
+  localStream.getAudioTracks().forEach(t=>{
+    t.enabled = !t.enabled;
+    micActivo = t.enabled;
+  });
+}
+
+/* 🔥 USUARIOS */
+socket.on("lista-usuarios", users=>{
   let cont = document.getElementById("usuarios");
-  cont.innerHTML = "";
+  cont.innerHTML="";
 
   for(let id in users){
     if(id === socket.id) continue;
 
     let div = document.createElement("div");
-    div.className = "user";
+    div.className="user";
+    div.innerText = users[id].nombre;
 
-    let estado = users[id].camPublica ? "🟢" : "🔴";
-
-    div.innerHTML = `${estado} ${users[id].nombre}`;
-
-    div.onclick = ()=>{
+    // CLICK IZQUIERDO → video
+    div.onclick=()=>{
       if(users[id].camPublica){
         crearPeer(id,true);
       } else {
@@ -110,41 +152,97 @@ socket.on("lista-usuarios", (users)=>{
       }
     };
 
+    // CLICK DERECHO → chat privado
+    div.oncontextmenu=(e)=>{
+      e.preventDefault();
+      let texto = prompt("Mensaje privado:");
+      if(texto){
+        socket.emit("mensaje-privado", {
+          to:id,
+          texto
+        });
+      }
+    };
+
     cont.appendChild(div);
   }
 });
 
-// 🔥 SOLICITUD
-socket.on("solicitud-cam", (data)=>{
-  let ok = confirm(`${data.nombre} quiere ver tu cámara`);
-  socket.emit("respuesta-cam", {
-    to: data.from,
-    aceptado: ok
-  });
+/* 🔥 CHAT GLOBAL */
+function enviar(){
+  let texto = document.getElementById("msg").value;
+  socket.emit("mensaje",{nombre,texto});
+}
+
+socket.on("mensaje",(d)=>{
+  mensajes.innerHTML += `<p>${d.nombre}: ${d.texto}</p>`;
 });
 
-// 🔥 RESPUESTA
-socket.on("respuesta-cam", (data)=>{
+/* 🔥 CHAT PRIVADO */
+socket.on("mensaje-privado",(d)=>{
+  alert(`💬 Privado de ${d.nombre}: ${d.texto}`);
+});
+
+/* 🔥 SOLICITUD */
+socket.on("solicitud-cam", data=>{
+  let ok = confirm(`${data.nombre} quiere ver tu cámara`);
+  socket.emit("respuesta-cam",{to:data.from,aceptado:ok});
+});
+
+socket.on("respuesta-cam", data=>{
   if(data.aceptado){
     crearPeer(data.from,true);
-  } else {
-    alert("Solicitud rechazada");
   }
 });
 
-// 🔥 WEBRTC
+/* 🔥 VIDEO FLOTANTE */
+function crearVentanaVideo(stream,id){
+  let box = document.createElement("div");
+  box.className="videoBox";
+  box.style.top="100px";
+  box.style.left="100px";
+
+  let video = document.createElement("video");
+  video.autoplay=true;
+  video.srcObject=stream;
+
+  let close = document.createElement("div");
+  close.innerText="X";
+  close.className="closeBtn";
+  close.onclick=()=>box.remove();
+
+  box.appendChild(video);
+  box.appendChild(close);
+  document.body.appendChild(box);
+
+  // DRAG
+  box.onmousedown = function(e){
+    let shiftX = e.clientX - box.offsetLeft;
+    let shiftY = e.clientY - box.offsetTop;
+
+    document.onmousemove = function(e){
+      box.style.left = e.clientX - shiftX + 'px';
+      box.style.top = e.clientY - shiftY + 'px';
+    };
+
+    document.onmouseup = function(){
+      document.onmousemove=null;
+    };
+  };
+}
+
+/* 🔥 WEBRTC */
 function crearPeer(id, initiator){
   let peer = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
   });
 
-  localStream.getTracks().forEach(t=>peer.addTrack(t,localStream));
+  if(localStream){
+    localStream.getTracks().forEach(t=>peer.addTrack(t,localStream));
+  }
 
   peer.ontrack = e=>{
-    let v = document.createElement("video");
-    v.autoplay = true;
-    v.srcObject = e.streams[0];
-    document.getElementById("videos").appendChild(v);
+    crearVentanaVideo(e.streams[0],id);
   };
 
   peer.onicecandidate = e=>{
@@ -160,7 +258,7 @@ function crearPeer(id, initiator){
     });
   }
 
-  peers[id] = peer;
+  peers[id]=peer;
 }
 
 socket.on("signal", async data=>{
