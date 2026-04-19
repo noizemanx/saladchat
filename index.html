@@ -2,15 +2,10 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>SaladChat PRO</title>
+<title>SaladChat PRO+</title>
 
 <style>
-body {
-  margin:0;
-  background:#000;
-  color:#fff;
-  font-family:sans-serif;
-}
+body { margin:0; background:#000; color:#fff; font-family:sans-serif; }
 
 #videos {
   display:grid;
@@ -19,16 +14,13 @@ body {
   padding:5px;
 }
 
-video {
-  width:100%;
-  border-radius:10px;
-}
+video { width:100%; border-radius:10px; }
 
 #usuarios {
   position:fixed;
   right:0;
   top:0;
-  width:200px;
+  width:220px;
   height:100%;
   background:#111;
   overflow:auto;
@@ -36,39 +28,35 @@ video {
 }
 
 .user {
-  padding:5px;
+  padding:6px;
   cursor:pointer;
   border-bottom:1px solid #333;
 }
 
-.user:hover {
-  background:#222;
-}
+.user:hover { background:#222; }
 
-#chat {
+.publica { color:#22c55e; }
+.privada { color:#ef4444; }
+
+#controls {
   position:fixed;
-  bottom:0;
-  left:0;
-  width:300px;
-  background:#111;
+  top:10px;
+  left:10px;
 }
-
 </style>
 </head>
 
 <body>
+
+<div id="controls">
+  <button onclick="toggleModo()">Modo: Privada</button>
+</div>
 
 <div id="videos">
   <video id="localVideo" autoplay muted></video>
 </div>
 
 <div id="usuarios"></div>
-
-<div id="chat">
-  <input id="msg">
-  <button onclick="enviar()">Enviar</button>
-  <div id="mensajes"></div>
-</div>
 
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
@@ -81,6 +69,7 @@ socket.emit("join-room", nombre);
 
 let localStream;
 let peers = {};
+let camPublica = false;
 
 navigator.mediaDevices.getUserMedia({video:true,audio:true})
 .then(stream=>{
@@ -88,6 +77,17 @@ navigator.mediaDevices.getUserMedia({video:true,audio:true})
   document.getElementById("localVideo").srcObject = stream;
 });
 
+// 🔥 CAMBIAR MODO
+function toggleModo(){
+  camPublica = !camPublica;
+
+  socket.emit("toggle-cam", camPublica);
+
+  document.querySelector("#controls button").innerText =
+    camPublica ? "Modo: Pública" : "Modo: Privada";
+}
+
+// 🔥 LISTA USUARIOS
 socket.on("lista-usuarios", (users)=>{
   let cont = document.getElementById("usuarios");
   cont.innerHTML = "";
@@ -97,17 +97,24 @@ socket.on("lista-usuarios", (users)=>{
 
     let div = document.createElement("div");
     div.className = "user";
-    div.innerText = users[id];
+
+    let estado = users[id].camPublica ? "🟢" : "🔴";
+
+    div.innerHTML = `${estado} ${users[id].nombre}`;
 
     div.onclick = ()=>{
-      socket.emit("solicitar-cam", id);
+      if(users[id].camPublica){
+        crearPeer(id,true);
+      } else {
+        socket.emit("solicitar-cam", id);
+      }
     };
 
     cont.appendChild(div);
   }
 });
 
-// RECIBIR SOLICITUD
+// 🔥 SOLICITUD
 socket.on("solicitud-cam", (data)=>{
   let ok = confirm(`${data.nombre} quiere ver tu cámara`);
   socket.emit("respuesta-cam", {
@@ -116,16 +123,16 @@ socket.on("solicitud-cam", (data)=>{
   });
 });
 
-// RESPUESTA
+// 🔥 RESPUESTA
 socket.on("respuesta-cam", (data)=>{
   if(data.aceptado){
-    crearPeer(data.from, true);
+    crearPeer(data.from,true);
   } else {
-    alert("Rechazaron tu solicitud");
+    alert("Solicitud rechazada");
   }
 });
 
-// WEBRTC
+// 🔥 WEBRTC
 function crearPeer(id, initiator){
   let peer = new RTCPeerConnection({
     iceServers:[{urls:"stun:stun.l.google.com:19302"}]
@@ -174,16 +181,6 @@ socket.on("signal", async data=>{
   } else {
     await peer.addIceCandidate(new RTCIceCandidate(data.signal));
   }
-});
-
-// CHAT
-function enviar(){
-  let texto = document.getElementById("msg").value;
-  socket.emit("mensaje",{nombre,texto});
-}
-
-socket.on("mensaje",(d)=>{
-  document.getElementById("mensajes").innerHTML += `<p>${d.nombre}: ${d.texto}</p>`;
 });
 
 </script>
