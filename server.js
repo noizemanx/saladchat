@@ -13,13 +13,9 @@ const io = new Server(server, {
 let usuarios = {};
 
 io.on("connection", (socket) => {
-socket.on("mensaje-privado", (data) => {
-  io.to(data.to).emit("mensaje-privado", {
-    from: socket.id,
-    nombre: usuarios[socket.id].nombre,
-    texto: data.texto
-  });
-});
+
+  console.log("🟢 conectado:", socket.id);
+
   socket.on("join-room", (nombre) => {
     usuarios[socket.id] = {
       nombre,
@@ -38,6 +34,13 @@ socket.on("mensaje-privado", (data) => {
 
   socket.on("mensaje", (data) => {
     io.emit("mensaje", data);
+  });
+
+  socket.on("mensaje-privado", (data) => {
+    io.to(data.to).emit("mensaje-privado", {
+      nombre: usuarios[socket.id].nombre,
+      texto: data.texto
+    });
   });
 
   socket.on("solicitar-cam", (to) => {
@@ -66,8 +69,9 @@ socket.on("mensaje-privado", (data) => {
     io.emit("lista-usuarios", usuarios);
     io.emit("user-disconnected", socket.id);
   });
+
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("🔥 Server PRO+ corriendo");
+  console.log("🔥 servidor corriendo");
 });
