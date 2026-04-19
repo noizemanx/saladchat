@@ -13,28 +13,34 @@ const io = new Server(server, {
 let usuarios = {};
 
 io.on("connection", (socket) => {
-  console.log("🟢 Usuario conectado:", socket.id);
 
   socket.on("join-room", (nombre) => {
-    usuarios[socket.id] = nombre;
-    socket.nombre = nombre;
+    usuarios[socket.id] = {
+      nombre,
+      camPublica: false
+    };
 
     io.emit("lista-usuarios", usuarios);
+  });
+
+  socket.on("toggle-cam", (estado) => {
+    if (usuarios[socket.id]) {
+      usuarios[socket.id].camPublica = estado;
+      io.emit("lista-usuarios", usuarios);
+    }
   });
 
   socket.on("mensaje", (data) => {
     io.emit("mensaje", data);
   });
 
-  // 🔥 SOLICITAR CAMARA
   socket.on("solicitar-cam", (to) => {
     io.to(to).emit("solicitud-cam", {
       from: socket.id,
-      nombre: socket.nombre
+      nombre: usuarios[socket.id].nombre
     });
   });
 
-  // 🔥 RESPUESTA CAMARA
   socket.on("respuesta-cam", (data) => {
     io.to(data.to).emit("respuesta-cam", {
       from: socket.id,
@@ -42,7 +48,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // 🔥 WEBRTC SIGNAL
   socket.on("signal", (data) => {
     io.to(data.to).emit("signal", {
       from: socket.id,
@@ -58,5 +63,5 @@ io.on("connection", (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("🔥 Server PRO corriendo");
+  console.log("🔥 Server PRO+ corriendo");
 });
